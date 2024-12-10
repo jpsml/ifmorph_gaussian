@@ -10,6 +10,7 @@ import torch
 import matplotlib.pyplot as plt
 import mediapipe as mp
 from ifmorph.point_editor import FaceInteractor
+from ifmorph.diff_operators import jacobian
 
 mp_face_mesh = mp.solutions.face_mesh
 
@@ -512,14 +513,16 @@ def create_morphing(
     t1 = 0
     t2 = 1
     times = np.arange(t1, t2, (t2 - t1) / n_frames)
-    grid = get_grid(frame_dims).to(device).requires_grad_(False)
+    #grid = get_grid(frame_dims).to(device).requires_grad_(False)
+    grid = get_grid(frame_dims).to(device).requires_grad_(True)
 
     out = cv2.VideoWriter(output_path,
                           cv2.VideoWriter_fourcc(*"mp4v"),
                           fps,
                           frame_dims[::-1], True)
 
-    with torch.no_grad():
+    #with torch.no_grad():
+    if True:
         if isinstance(landmark_src, torch.Tensor):
             landmark_src = landmark_src.clone().detach()
         else:
@@ -539,7 +542,12 @@ def create_morphing(
                     grid, 1-t, warp_net, frame1, frame_dims
                 )
             else:
-                wpoints, _ = warp_points(warp_net, grid, -t)
+                #wpoints, _ = warp_points(warp_net, grid, -t)
+                wpoints_gt, coords = warp_points(warp_net, grid, -t, preserve_grad=True)
+                jac = jacobian(wpoints_gt.unsqueeze(0), coords)[0].squeeze(0)
+                wpoints = jac @ coords.unsqueeze(-1)
+                wpoints = wpoints.squeeze(-1)
+
                 rec0 = frame0.pixels(
                     wpoints
                 ).reshape([frame_dims[0], frame_dims[1], frame0.n_channels])
